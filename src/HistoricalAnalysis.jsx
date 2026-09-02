@@ -1,10 +1,29 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 export default function HistoricalAnalysis({ onNavigate, onLogout }) {
   const [activeNav, setActiveNav] = useState("analytics-reports");
   const [dateRange, setDateRange] = useState("Last 24 Hours (Oct 24)");
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [recordsCount, setRecordsCount] = useState(4);
+  const [auditEvents, setAuditEvents] = useState([]);
+  const [historyMeta, setHistoryMeta] = useState({
+    doc_id: "IMC-REP-8492-A",
+    classification: "OFFICIAL USE",
+    priority_response_latency_sec: 14.2,
+    latency_delta_vs_yesterday: -1.4,
+  });
+
+  useEffect(() => {
+    fetch("http://127.0.0.1:8000/api/history")
+      .then((res) => res.json())
+      .then((data) => setHistoryMeta(data))
+      .catch(() => {});
+
+    fetch("http://127.0.0.1:8000/api/priority-events")
+      .then((res) => res.json())
+      .then((data) => setAuditEvents(data))
+      .catch(() => {});
+  }, []);
 
   const navItems = [
     { id: "junction-dashboard", label: "JUNCTION DASHBOARD", icon: "dashboard" },
@@ -191,11 +210,11 @@ export default function HistoricalAnalysis({ onNavigate, onLogout }) {
                   <div className="flex flex-wrap gap-4 mt-2">
                     <span className="font-data-mono text-data-mono text-on-surface-variant flex items-center gap-1">
                       <span className="material-symbols-outlined text-[16px]">fingerprint</span>{" "}
-                      DOC-ID: IMC-REP-8492-A
+                      DOC-ID: {historyMeta.doc_id}
                     </span>
                     <span className="font-data-mono text-data-mono text-on-surface-variant flex items-center gap-1">
                       <span className="material-symbols-outlined text-[16px]">shield</span>{" "}
-                      CLASSIFICATION: OFFICIAL USE
+                      CLASSIFICATION: {historyMeta.classification}
                     </span>
                   </div>
                 </div>
@@ -237,7 +256,7 @@ export default function HistoricalAnalysis({ onNavigate, onLogout }) {
                   </div>
 
                   <button
-                    onClick={() => alert("Generating PDF Report for DOC-ID: IMC-REP-8492-A...")}
+                    onClick={() => alert(`Exporting PDF for ${historyMeta.doc_id}...`)}
                     className="bg-surface-container-high hover:bg-surface-container-highest text-on-surface px-4 py-2 rounded font-label-bold text-label-bold uppercase transition-colors shadow-sm flex items-center gap-2 h-[40px]"
                   >
                     <span className="material-symbols-outlined text-[18px]">picture_as_pdf</span>{" "}
@@ -286,7 +305,11 @@ export default function HistoricalAnalysis({ onNavigate, onLogout }) {
                   </div>
 
                   {/* SVG Line Chart */}
-                  <svg className="w-full h-full text-primary" preserveAspectRatio="none" viewBox="0 0 800 280">
+                  <svg
+                    className="w-full h-full text-primary"
+                    preserveAspectRatio="none"
+                    viewBox="0 0 800 280"
+                  >
                     <defs>
                       <linearGradient id="lineGrad" x1="0" x2="1" y1="0" y2="0">
                         <stop offset="0%" stopColor="currentColor" />
@@ -339,13 +362,14 @@ export default function HistoricalAnalysis({ onNavigate, onLogout }) {
                   >
                     <defs>
                       <linearGradient id="areaGrad" x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="0%" stopColor="currentColor" stopOpacity="0.2" />
-                        <stop offset="100%" stopColor="currentColor" stopOpacity="0.0" />
+                        <stop offset="0%" stopColor="currentColor" />
+                        <stop offset="100%" stopColor="#fe5e2f" />
                       </linearGradient>
                     </defs>
                     <path
                       d="M0,150 L50,120 L100,140 L150,90 L200,110 L250,60 L300,80 L350,40 L400,70 L400,200 L0,200 Z"
                       fill="url(#areaGrad)"
+                      fillOpacity="0.25"
                     />
                     <path
                       d="M0,150 L50,120 L100,140 L150,90 L200,110 L250,60 L300,80 L350,40 L400,70"
@@ -357,14 +381,14 @@ export default function HistoricalAnalysis({ onNavigate, onLogout }) {
                   </svg>
                   <div className="absolute bottom-4 left-4">
                     <span className="font-display-lg text-display-lg text-on-surface">
-                      14.2
+                      {historyMeta.priority_response_latency_sec}
                       <span className="font-headline-sm text-headline-sm text-on-surface-variant">
                         s
                       </span>
                     </span>
                     <div className="font-label-bold text-label-bold text-secondary flex items-center gap-1">
                       <span className="material-symbols-outlined text-[14px]">arrow_downward</span>{" "}
-                      1.4s vs yesterday
+                      {Math.abs(historyMeta.latency_delta_vs_yesterday)}s vs yesterday
                     </div>
                   </div>
                 </div>
@@ -375,7 +399,7 @@ export default function HistoricalAnalysis({ onNavigate, onLogout }) {
             <div className="bg-surface-container-lowest rounded-lg shadow-sm flex flex-col overflow-hidden">
               <div className="p-stack-md bg-surface-container-lowest">
                 <h2 className="font-headline-sm text-headline-sm text-on-surface m-0">
-                  Priority Event Audit Log
+                  Priority Event Audit Log (SQLite Repository)
                 </h2>
               </div>
               <div className="w-full overflow-x-auto">

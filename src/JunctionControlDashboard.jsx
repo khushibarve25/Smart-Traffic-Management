@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 export default function JunctionControlDashboard({ onLogout, onNavigate }) {
   const [currentTime, setCurrentTime] = useState("");
@@ -6,20 +6,95 @@ export default function JunctionControlDashboard({ onLogout, onNavigate }) {
   const [activeNav, setActiveNav] = useState("junction-dashboard");
   const [manualOverride, setManualOverride] = useState(false);
 
+  // Live WebSocket state
+  const [wsConnected, setWsConnected] = useState(false);
+  const [recommendedGreen, setRecommendedGreen] = useState(45);
+  const [flowRate, setFlowRate] = useState(1240);
+  const [avgSpeed, setAvgSpeed] = useState(22);
+  const [detectionConfidence, setDetectionConfidence] = useState(92.4);
+  const [currentPhase, setCurrentPhase] = useState("North-South");
+  const [approachVolumes, setApproachVolumes] = useState({
+    North: 42,
+    East: 86,
+    South: 24,
+    West: 31,
+  });
+  const [preemptionActive, setPreemptionActive] = useState(false);
+
+  const wsRef = useRef(null);
+
+  // Real-time 24h Clock
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
       setCurrentTime(now.toLocaleTimeString("en-US", { hour12: false }));
-
-      if (Math.random() > 0.7) {
-        setLastUpdated(now.toLocaleTimeString("en-US", { hour12: false }));
-      }
     };
-
     updateTime();
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // WebSocket Live Connection
+  useEffect(() => {
+    let ws;
+    try {
+      ws = new WebSocket("ws://127.0.0.1:8000/ws/junction/JNC-MP-088");
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        setWsConnected(true);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.recommended_green_sec !== undefined) {
+            setRecommendedGreen(data.recommended_green_sec);
+          }
+          if (data.flow_rate_vph !== undefined) setFlowRate(data.flow_rate_vph);
+          if (data.avg_speed_kmh !== undefined) setAvgSpeed(data.avg_speed_kmh);
+          if (data.detection_confidence !== undefined) {
+            setDetectionConfidence(data.detection_confidence);
+          }
+          if (data.current_phase) setCurrentPhase(data.current_phase);
+          if (data.approach_volumes) setApproachVolumes(data.approach_volumes);
+          if (data.preemption) setPreemptionActive(data.preemption.is_active);
+
+          const now = new Date();
+          setLastUpdated(now.toLocaleTimeString("en-US", { hour12: false }));
+        } catch (err) {
+          console.error("WS Parse Error:", err);
+        }
+      };
+
+      ws.onclose = () => {
+        setWsConnected(false);
+      };
+
+      ws.onerror = () => {
+        setWsConnected(false);
+      };
+    } catch (e) {
+      setWsConnected(false);
+    }
+
+    return () => {
+      if (ws) ws.close();
+    };
+  }, []);
+
+  const handleOverrideToggle = async (checked) => {
+    setManualOverride(checked);
+    try {
+      await fetch("http://127.0.0.1:8000/api/junctions/JNC-MP-088/override", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: checked, mode: "ALL_RED" }),
+      });
+    } catch (e) {
+      // Graceful offline behavior
+    }
+  };
 
   const navItems = [
     { id: "junction-dashboard", label: "JUNCTION DASHBOARD", icon: "dashboard" },
@@ -85,7 +160,7 @@ export default function JunctionControlDashboard({ onLogout, onNavigate }) {
             className="flex items-center px-4 py-3 text-on-primary/70 hover:text-on-primary transition-all group cursor-pointer"
             onClick={(e) => {
               e.preventDefault();
-              setActiveNav("admin-settings");
+              if (onNavigate) onNavigate("admin-settings");
             }}
             href="#admin-settings"
           >
@@ -98,7 +173,18 @@ export default function JunctionControlDashboard({ onLogout, onNavigate }) {
       {/* Main Content Area */}
       <div className="pl-72">
         {/* Top Header */}
-        <header className="fixed top-0 left-72 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-md z-40 flex items-center justify-end px-margin-edge shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+        <header className="fixed top-0 left-72 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-md z-40 flex items-center justify-between px-margin-edge shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+          {/* Swappable Ingest / Simulation Mode Badge */}
+          <div className="flex items-center gap-2">
+            <span className="bg-primary/10 text-primary text-[11px] font-label-bold px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 border border-primary/20">
+              <span className={`w-2 h-2 rounded-full ${wsConnected ? "bg-[#2E7D32]" : "bg-secondary"} animate-pulse`} />
+              {wsConnected ? "Backend Live Stream" : "Offline Demo Mode"} | RF-DETR Ready
+            </span>
+            <span className="text-[11px] text-on-surface-variant font-data-mono hidden md:inline">
+              Source: Recorded Sample Footage (Swappable to RTSP)
+            </span>
+          </div>
+
           <div className="flex items-center gap-stack-md">
             <div className="text-right flex flex-col">
               <span className="font-label-bold text-label-bold text-on-surface">Operator 402</span>
@@ -149,7 +235,7 @@ export default function JunctionControlDashboard({ onLogout, onNavigate }) {
                   <div className="absolute top-4 left-4 z-10 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-full">
                     <span className="w-2 h-2 rounded-full bg-secondary animate-pulse" />
                     <span className="font-label-bold text-label-bold text-white uppercase tracking-wider">
-                      Live Feed Feed 01
+                      Live Feed 01 (Rajwada Cam-01)
                     </span>
                   </div>
                   <div className="absolute top-4 right-4 z-10 flex gap-2">
@@ -178,9 +264,14 @@ export default function JunctionControlDashboard({ onLogout, onNavigate }) {
                       </span>
                       <div className="flex items-center gap-2 mt-1">
                         <div className="h-1.5 w-24 bg-white/20 rounded-full overflow-hidden">
-                          <div className="h-full bg-secondary w-[92%]" />
+                          <div
+                            className="h-full bg-secondary"
+                            style={{ width: `${detectionConfidence}%` }}
+                          />
                         </div>
-                        <span className="font-data-mono text-data-mono text-white">92.4%</span>
+                        <span className="font-data-mono text-data-mono text-white">
+                          {detectionConfidence}%
+                        </span>
                       </div>
                     </div>
                     <div className="flex gap-4 text-white">
@@ -188,13 +279,13 @@ export default function JunctionControlDashboard({ onLogout, onNavigate }) {
                         <span className="font-label-sm text-label-sm text-white/70 uppercase">
                           Flow Rate
                         </span>
-                        <span className="font-data-mono text-data-mono">1,240 v/h</span>
+                        <span className="font-data-mono text-data-mono">{flowRate} v/h</span>
                       </div>
                       <div className="flex flex-col items-end">
                         <span className="font-label-sm text-label-sm text-white/70 uppercase">
                           Avg Speed
                         </span>
-                        <span className="font-data-mono text-data-mono">22 km/h</span>
+                        <span className="font-data-mono text-data-mono">{avgSpeed} km/h</span>
                       </div>
                     </div>
                   </div>
@@ -208,19 +299,26 @@ export default function JunctionControlDashboard({ onLogout, onNavigate }) {
                       <div>
                         <h2 className="font-headline-sm text-headline-sm m-0">Phase Control</h2>
                         <p className="font-label-sm text-label-sm text-on-primary/70 uppercase tracking-wide mt-1">
-                          Currently Active: North-South
+                          Currently Active: {currentPhase}
                         </p>
                       </div>
-                      <span className="material-symbols-outlined text-secondary text-3xl">traffic</span>
+                      <span className="material-symbols-outlined text-secondary text-3xl">
+                        traffic
+                      </span>
                     </div>
                     <div className="flex flex-col items-center justify-center py-6 relative z-10">
                       <span className="font-label-bold text-label-bold text-on-primary/80 uppercase mb-2">
                         Recommended Green
                       </span>
                       <div className="flex items-baseline gap-1">
-                        <span className="font-display-lg text-display-lg font-bold tabular-nums">45</span>
+                        <span className="font-display-lg text-display-lg font-bold tabular-nums">
+                          {recommendedGreen}
+                        </span>
                         <span className="font-body-lg text-body-lg text-on-primary/70">s</span>
                       </div>
+                      <span className="text-[11px] text-on-primary/60 uppercase tracking-wider mt-1">
+                        Webster Proportional Allocation
+                      </span>
                     </div>
                     <div className="mt-auto pt-4 border-t border-on-primary/10 relative z-10 flex items-center justify-between">
                       <div className="flex flex-col">
@@ -234,7 +332,7 @@ export default function JunctionControlDashboard({ onLogout, onNavigate }) {
                           className="sr-only peer"
                           type="checkbox"
                           checked={manualOverride}
-                          onChange={(e) => setManualOverride(e.target.checked)}
+                          onChange={(e) => handleOverrideToggle(e.target.checked)}
                         />
                         <div className="w-11 h-6 bg-surface/20 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-secondary" />
                       </label>
@@ -252,7 +350,7 @@ export default function JunctionControlDashboard({ onLogout, onNavigate }) {
                       Queue Density
                     </h3>
                     <span className="font-label-sm text-label-sm text-on-surface-variant bg-surface-container-high px-2 py-1 rounded">
-                      Vehicles per Approach
+                      Vehicles per Approach (Live WS)
                     </span>
                   </div>
                   <div className="flex items-end justify-around h-48 mt-4 relative">
@@ -266,12 +364,14 @@ export default function JunctionControlDashboard({ onLogout, onNavigate }) {
                     {/* North */}
                     <div className="flex flex-col items-center gap-2 group w-16">
                       <span className="font-data-mono text-data-mono text-on-surface-variant group-hover:text-primary transition-colors">
-                        42
+                        {approachVolumes.North}
                       </span>
                       <div className="w-full bg-primary/20 rounded-t-sm relative h-32 group-hover:bg-primary/30 transition-colors">
                         <div
-                          className="absolute bottom-0 w-full bg-primary rounded-t-sm transition-all duration-1000"
-                          style={{ height: "75%" }}
+                          className="absolute bottom-0 w-full bg-primary rounded-t-sm transition-all duration-700"
+                          style={{
+                            height: `${Math.min(100, Math.max(10, approachVolumes.North * 2))}%`,
+                          }}
                         />
                       </div>
                       <span className="font-label-bold text-label-bold text-on-surface">North</span>
@@ -280,12 +380,14 @@ export default function JunctionControlDashboard({ onLogout, onNavigate }) {
                     {/* East */}
                     <div className="flex flex-col items-center gap-2 group w-16">
                       <span className="font-data-mono text-data-mono text-secondary group-hover:text-secondary-container transition-colors">
-                        86
+                        {approachVolumes.East}
                       </span>
                       <div className="w-full bg-secondary/20 rounded-t-sm relative h-40 group-hover:bg-secondary/30 transition-colors">
                         <div
-                          className="absolute bottom-0 w-full bg-secondary rounded-t-sm transition-all duration-1000"
-                          style={{ height: "95%" }}
+                          className="absolute bottom-0 w-full bg-secondary rounded-t-sm transition-all duration-700"
+                          style={{
+                            height: `${Math.min(100, Math.max(10, approachVolumes.East))}%`,
+                          }}
                         />
                       </div>
                       <span className="font-label-bold text-label-bold text-on-surface">East</span>
@@ -294,12 +396,14 @@ export default function JunctionControlDashboard({ onLogout, onNavigate }) {
                     {/* South */}
                     <div className="flex flex-col items-center gap-2 group w-16">
                       <span className="font-data-mono text-data-mono text-on-surface-variant group-hover:text-primary transition-colors">
-                        24
+                        {approachVolumes.South}
                       </span>
                       <div className="w-full bg-primary/20 rounded-t-sm relative h-20 group-hover:bg-primary/30 transition-colors">
                         <div
-                          className="absolute bottom-0 w-full bg-primary rounded-t-sm transition-all duration-1000"
-                          style={{ height: "40%" }}
+                          className="absolute bottom-0 w-full bg-primary rounded-t-sm transition-all duration-700"
+                          style={{
+                            height: `${Math.min(100, Math.max(10, approachVolumes.South * 2.5))}%`,
+                          }}
                         />
                       </div>
                       <span className="font-label-bold text-label-bold text-on-surface">South</span>
@@ -308,12 +412,14 @@ export default function JunctionControlDashboard({ onLogout, onNavigate }) {
                     {/* West */}
                     <div className="flex flex-col items-center gap-2 group w-16">
                       <span className="font-data-mono text-data-mono text-on-surface-variant group-hover:text-primary transition-colors">
-                        31
+                        {approachVolumes.West}
                       </span>
                       <div className="w-full bg-primary/20 rounded-t-sm relative h-24 group-hover:bg-primary/30 transition-colors">
                         <div
-                          className="absolute bottom-0 w-full bg-primary rounded-t-sm transition-all duration-1000"
-                          style={{ height: "60%" }}
+                          className="absolute bottom-0 w-full bg-primary rounded-t-sm transition-all duration-700"
+                          style={{
+                            height: `${Math.min(100, Math.max(10, approachVolumes.West * 2))}%`,
+                          }}
                         />
                       </div>
                       <span className="font-label-bold text-label-bold text-on-surface">West</span>
@@ -362,7 +468,10 @@ export default function JunctionControlDashboard({ onLogout, onNavigate }) {
                       </div>
                     </div>
                   </div>
-                  <button className="mt-4 w-full py-2 bg-surface hover:bg-surface-container-high text-primary font-label-bold text-label-bold uppercase rounded border border-primary/20 transition-colors">
+                  <button
+                    onClick={() => onNavigate && onNavigate("analytics-reports")}
+                    className="mt-4 w-full py-2 bg-surface hover:bg-surface-container-high text-primary font-label-bold text-label-bold uppercase rounded border border-primary/20 transition-colors"
+                  >
                     View All Logs
                   </button>
                 </div>
@@ -372,15 +481,17 @@ export default function JunctionControlDashboard({ onLogout, onNavigate }) {
               <div className="bg-primary rounded-lg p-3 flex items-center justify-between text-on-primary shadow-sm mt-stack-md flex-wrap gap-4">
                 <div className="flex items-center gap-6">
                   <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#4CAF50]" />
+                    <span
+                      className={`w-2 h-2 rounded-full ${wsConnected ? "bg-[#4CAF50]" : "bg-secondary"}`}
+                    />
                     <span className="font-label-sm text-label-sm uppercase tracking-wider text-on-primary/80">
-                      Feed Connected
+                      {wsConnected ? "Feed Connected (WS)" : "Feed Reconnecting"}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-[#4CAF50]" />
                     <span className="font-label-sm text-label-sm uppercase tracking-wider text-on-primary/80">
-                      Model Running
+                      Model Running (RF-DETR)
                     </span>
                   </div>
                   <div className="flex items-center gap-2">

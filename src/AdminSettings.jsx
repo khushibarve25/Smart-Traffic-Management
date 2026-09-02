@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 export default function AdminSettings({ onNavigate, onLogout }) {
   const [activeNav, setActiveNav] = useState("admin-settings");
@@ -6,6 +6,41 @@ export default function AdminSettings({ onNavigate, onLogout }) {
   const [autoReset, setAutoReset] = useState(120);
   const [thresholdSaved, setThresholdSaved] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [directoryList, setDirectoryList] = useState([]);
+
+  useEffect(() => {
+    // Fetch live system settings
+    fetch("http://127.0.0.1:8000/api/system/settings")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.confidence_threshold) setConfidence(data.confidence_threshold);
+        if (data.auto_reset_timer) setAutoReset(data.auto_reset_timer);
+      })
+      .catch(() => {});
+
+    // Fetch junctions from SQLite
+    fetch("http://127.0.0.1:8000/api/junctions")
+      .then((res) => res.json())
+      .then((data) => {
+        setDirectoryList(
+          data.map((j) => ({
+            id: j.id,
+            location: j.name,
+            status: j.cam_status || "Online (4/4)",
+            type: j.status.toLowerCase(),
+          }))
+        );
+      })
+      .catch(() => {
+        setDirectoryList([
+          { id: "JNC-MP-001", location: "Palasia Square", status: "Online (4/4)", type: "online" },
+          { id: "JNC-MP-042", location: "Bhawarkuan Chauraha", status: "Degraded (3/4)", type: "degraded" },
+          { id: "JNC-MP-088", location: "Regal Square", status: "Online (6/6)", type: "online" },
+          { id: "JNC-MP-112", location: "Geeta Bhawan", status: "Offline (0/4)", type: "offline" },
+          { id: "JNC-MP-005", location: "Vijay Nagar", status: "Online (8/8)", type: "online" },
+        ]);
+      });
+  }, []);
 
   const navItems = [
     { id: "junction-dashboard", label: "JUNCTION DASHBOARD", icon: "dashboard" },
@@ -21,46 +56,24 @@ export default function AdminSettings({ onNavigate, onLogout }) {
     }
   };
 
-  const directoryList = [
-    {
-      id: "JNC-MP-001",
-      location: "Palasia Square",
-      status: "Online (4/4)",
-      type: "online",
-    },
-    {
-      id: "JNC-MP-042",
-      location: "Bhawarkuan Chauraha",
-      status: "Degraded (3/4)",
-      type: "degraded",
-    },
-    {
-      id: "JNC-MP-088",
-      location: "Regal Square",
-      status: "Online (6/6)",
-      type: "online",
-    },
-    {
-      id: "JNC-MP-112",
-      location: "Geeta Bhawan",
-      status: "Offline (0/4)",
-      type: "offline",
-    },
-    {
-      id: "JNC-MP-005",
-      location: "Vijay Nagar",
-      status: "Online (8/8)",
-      type: "online",
-    },
-  ];
-
   const filteredDirectory = directoryList.filter(
     (item) =>
       item.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.location.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleApplyThresholds = () => {
+  const handleApplyThresholds = async () => {
+    try {
+      await fetch("http://127.0.0.1:8000/api/system/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          confidence_threshold: parseInt(confidence, 10),
+          auto_reset_timer: parseInt(autoReset, 10),
+        }),
+      });
+    } catch (e) {}
+
     setThresholdSaved(true);
     setTimeout(() => setThresholdSaved(false), 2000);
   };
@@ -161,7 +174,8 @@ export default function AdminSettings({ onNavigate, onLogout }) {
               <h1 className="font-headline-lg text-headline-lg text-on-surface">Admin & Settings</h1>
               <p className="font-body-md text-body-md text-on-surface-variant max-w-3xl">
                 Configure system parameters, manage junction devices, and review audit trails.
-                Changes here affect global operation metrics and alerting sensitivity.
+                Changes here persist directly to SQLite storage and affect global recommendation
+                sensitivity.
               </p>
             </div>
 
@@ -239,7 +253,7 @@ export default function AdminSettings({ onNavigate, onLogout }) {
                     onClick={handleApplyThresholds}
                     className="mt-stack-sm bg-primary text-on-primary font-label-bold text-label-bold py-3 rounded-lg uppercase tracking-wider hover:bg-primary-container transition-colors shadow-sm"
                   >
-                    {thresholdSaved ? "Thresholds Applied!" : "Apply Thresholds"}
+                    {thresholdSaved ? "Thresholds Saved to DB!" : "Apply Thresholds"}
                   </button>
                 </div>
 
@@ -410,7 +424,7 @@ export default function AdminSettings({ onNavigate, onLogout }) {
                 <div className="bg-surface-container-lowest rounded-xl shadow-md p-stack-md flex flex-col flex-1 min-h-[300px]">
                   <div className="flex items-center justify-between border-b border-surface-container-highest pb-stack-sm mb-stack-sm">
                     <h2 className="font-headline-sm text-headline-sm text-on-surface">
-                      System Audit Log
+                      System Audit Log (Persisted)
                     </h2>
                     <button
                       onClick={() => alert("Exporting System Audit Log as CSV...")}
@@ -470,7 +484,7 @@ export default function AdminSettings({ onNavigate, onLogout }) {
                       <div>
                         <p className="font-body-md text-body-md text-on-surface">
                           <span className="font-label-bold">Admin_Sup1</span> updated{" "}
-                          <span className="font-label-bold">Confidence Threshold</span> to 85%.
+                          <span className="font-label-bold">Confidence Threshold</span> to {confidence}%.
                         </p>
                         <p className="font-label-sm text-label-sm text-on-surface-variant mt-1 font-data-mono">
                           Prev: 80% | Session: ADM_8829

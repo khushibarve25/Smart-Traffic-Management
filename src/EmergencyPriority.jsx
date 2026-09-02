@@ -4,20 +4,62 @@ export default function EmergencyPriority({ onNavigate, onLogout }) {
   const [activeNav, setActiveNav] = useState("emergency-alerts");
   const [countdown, setCountdown] = useState(42);
   const [isCleared, setIsCleared] = useState(false);
+  const [vehicleId, setVehicleId] = useState("AMB-IND-742");
+  const [events, setEvents] = useState([]);
 
+  // Fetch priority events from REST API
+  useEffect(() => {
+    fetch("http://127.0.0.1:8000/api/priority-events")
+      .then((res) => res.json())
+      .then((data) => setEvents(data))
+      .catch(() => {});
+  }, []);
+
+  // Live WebSocket updates
+  useEffect(() => {
+    let ws;
+    try {
+      ws = new WebSocket("ws://127.0.0.1:8000/ws/junction/JNC-MP-088");
+      ws.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.preemption) {
+            if (data.preemption.is_active && !isCleared) {
+              setCountdown(data.preemption.remaining_seconds || 42);
+              if (data.preemption.priority_vehicle_id) {
+                setVehicleId(data.preemption.priority_vehicle_id);
+              }
+            }
+          }
+        } catch (err) {}
+      };
+    } catch (e) {}
+
+    return () => {
+      if (ws) ws.close();
+    };
+  }, [isCleared]);
+
+  // Fallback countdown if WS paused
   useEffect(() => {
     if (isCleared) return;
     const interval = setInterval(() => {
       setCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          return 0;
-        }
+        if (prev <= 1) return 0;
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(interval);
   }, [isCleared]);
+
+  const handleAcknowledgeAndClear = async () => {
+    setIsCleared(true);
+    try {
+      await fetch("http://127.0.0.1:8000/api/priority-events/EVT-992-A4/clear", {
+        method: "POST",
+      });
+    } catch (e) {}
+  };
 
   const navItems = [
     { id: "junction-dashboard", label: "JUNCTION DASHBOARD", icon: "dashboard" },
@@ -104,7 +146,17 @@ export default function EmergencyPriority({ onNavigate, onLogout }) {
       {/* Main Container */}
       <div className="pl-72">
         {/* Top Header */}
-        <header className="fixed top-0 left-72 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-md z-40 flex items-center justify-end px-margin-edge shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+        <header className="fixed top-0 left-72 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-md z-40 flex items-center justify-between px-margin-edge shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+          <div className="flex items-center gap-2">
+            <span className="bg-secondary/15 text-secondary text-[11px] font-label-bold px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 border border-secondary/30">
+              <span className="w-2 h-2 rounded-full bg-secondary animate-ping" /> Preemption System
+              Active
+            </span>
+            <span className="text-[11px] text-on-surface-variant font-data-mono hidden md:inline">
+              Simulated Tracking Stream (Swappable to Live RTSP Feed)
+            </span>
+          </div>
+
           <div className="flex items-center gap-stack-md">
             <div className="text-right flex flex-col">
               <span className="font-label-bold text-label-bold text-on-surface">Operator 402</span>
@@ -165,7 +217,7 @@ export default function EmergencyPriority({ onNavigate, onLogout }) {
                     {formattedCountdown}
                   </div>
                   <button
-                    onClick={() => setIsCleared(true)}
+                    onClick={handleAcknowledgeAndClear}
                     className="mt-4 px-6 py-3 bg-on-secondary text-secondary font-label-bold text-label-bold uppercase rounded hover:bg-surface-container transition-colors shadow-md active:scale-95"
                   >
                     Acknowledge & Clear
@@ -181,7 +233,7 @@ export default function EmergencyPriority({ onNavigate, onLogout }) {
                   <div>
                     <h2 className="font-headline-sm text-headline-sm m-0">Preemption Cleared</h2>
                     <p className="font-body-md text-on-surface-variant m-0">
-                      Standard phase timings restored to Rajwada North Junction.
+                      Standard phase timings restored to Rajwada North Junction. All-red safely cleared.
                     </p>
                   </div>
                 </div>
@@ -319,7 +371,7 @@ export default function EmergencyPriority({ onNavigate, onLogout }) {
                         Unit ID
                       </span>
                       <span className="font-data-mono text-body-md text-on-surface bg-surface-container px-2 py-1 rounded">
-                        AMB-IND-742
+                        {vehicleId}
                       </span>
                     </div>
                   </div>
@@ -334,7 +386,7 @@ export default function EmergencyPriority({ onNavigate, onLogout }) {
                   Recent Priority Events
                 </h2>
                 <button
-                  onClick={() => alert("Exporting emergency event logs as CSV...")}
+                  onClick={() => alert("Exporting priority events...")}
                   className="text-primary font-label-bold text-label-bold uppercase hover:bg-primary/5 px-3 py-1 rounded transition-colors"
                 >
                   Export Log
@@ -352,91 +404,54 @@ export default function EmergencyPriority({ onNavigate, onLogout }) {
                     </tr>
                   </thead>
                   <tbody className="font-body-md text-body-md text-on-surface">
-                    <tr className="border-b border-surface-variant/50 hover:bg-surface-container/30 transition-colors">
-                      <td className="p-4 font-data-mono text-on-surface-variant">14:32:05 IST</td>
-                      <td className="p-4">
-                        <span className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-[20px] text-error">
-                            local_hospital
-                          </span>{" "}
-                          Ambulance
-                        </span>
-                      </td>
-                      <td className="p-4">Rajwada North</td>
-                      <td className="p-4 font-data-mono">
-                        {isCleared ? "Cleared" : `Active (${formattedCountdown})`}
-                      </td>
-                      <td className="p-4">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-medium ${
-                            isCleared
-                              ? "bg-surface-variant text-on-surface-variant"
-                              : "bg-error-container text-on-error-container"
-                          }`}
+                    {events.length > 0 ? (
+                      events.map((evt) => (
+                        <tr
+                          key={evt.id}
+                          className="border-b border-surface-variant/50 hover:bg-surface-container/30 transition-colors"
                         >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              isCleared ? "bg-outline" : "bg-error"
-                            }`}
-                          />{" "}
-                          {isCleared ? "Cleared" : "Active"}
-                        </span>
-                      </td>
-                    </tr>
-                    <tr className="border-b border-surface-variant/50 hover:bg-surface-container/30 transition-colors">
-                      <td className="p-4 font-data-mono text-on-surface-variant">10:15:22 IST</td>
-                      <td className="p-4">
-                        <span className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-[20px] text-primary">
-                            local_police
-                          </span>{" "}
-                          VIP Escort
-                        </span>
-                      </td>
-                      <td className="p-4">Palasia Sq. -&gt; LIG Sq.</td>
-                      <td className="p-4 font-data-mono">04m 12s</td>
-                      <td className="p-4">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-medium bg-surface-variant text-on-surface-variant">
-                          <span className="w-1.5 h-1.5 rounded-full bg-outline" /> Cleared
-                        </span>
-                      </td>
-                    </tr>
-                    <tr className="border-b border-surface-variant/50 hover:bg-surface-container/30 transition-colors">
-                      <td className="p-4 font-data-mono text-on-surface-variant">08:45:10 IST</td>
-                      <td className="p-4">
-                        <span className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-[20px] text-secondary">
-                            fire_truck
-                          </span>{" "}
-                          Fire Engine
-                        </span>
-                      </td>
-                      <td className="p-4">Bhawarkuan Junction</td>
-                      <td className="p-4 font-data-mono">02m 45s</td>
-                      <td className="p-4">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-medium bg-surface-variant text-on-surface-variant">
-                          <span className="w-1.5 h-1.5 rounded-full bg-outline" /> Cleared
-                        </span>
-                      </td>
-                    </tr>
-                    <tr className="hover:bg-surface-container/30 transition-colors">
-                      <td className="p-4 font-data-mono text-on-surface-variant">Yesterday</td>
-                      <td className="p-4">
-                        <span className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-[20px] text-error">
-                            local_hospital
-                          </span>{" "}
-                          Ambulance
-                        </span>
-                      </td>
-                      <td className="p-4">Vijay Nagar Sq.</td>
-                      <td className="p-4 font-data-mono">01m 50s</td>
-                      <td className="p-4">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-medium bg-surface-variant text-on-surface-variant">
-                          <span className="w-1.5 h-1.5 rounded-full bg-outline" /> Cleared
-                        </span>
-                      </td>
-                    </tr>
+                          <td className="p-4 font-data-mono text-on-surface-variant">
+                            {evt.timestamp}
+                          </td>
+                          <td className="p-4">
+                            <span className="flex items-center gap-2">
+                              <span className="material-symbols-outlined text-[20px] text-error">
+                                {evt.vehicle_type === "Ambulance"
+                                  ? "local_hospital"
+                                  : evt.vehicle_type === "VIP Escort"
+                                  ? "local_police"
+                                  : "fire_truck"}
+                              </span>{" "}
+                              {evt.vehicle_type}
+                            </span>
+                          </td>
+                          <td className="p-4">{evt.corridor}</td>
+                          <td className="p-4 font-data-mono">{evt.duration}</td>
+                          <td className="p-4">
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[12px] font-medium ${
+                                evt.status === "Active"
+                                  ? "bg-error-container text-on-error-container"
+                                  : "bg-surface-variant text-on-surface-variant"
+                              }`}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  evt.status === "Active" ? "bg-error" : "bg-outline"
+                                }`}
+                              />{" "}
+                              {evt.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr className="border-b border-surface-variant/50">
+                        <td colSpan="5" className="p-4 text-center text-on-surface-variant">
+                          No events recorded yet.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>

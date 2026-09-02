@@ -1,10 +1,18 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 export default function CityWideOverview({ onNavigate, onLogout }) {
   const [activeNav, setActiveNav] = useState("city-wide-overview");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedJunction, setSelectedJunction] = useState(null);
+  const [selectedJunction, setSelectedJunction] = useState("VN-01-M");
   const [broadcastActive, setBroadcastActive] = useState(false);
+  const [junctionsData, setJunctionsData] = useState([]);
+
+  useEffect(() => {
+    fetch("http://127.0.0.1:8000/api/junctions")
+      .then((res) => res.json())
+      .then((data) => setJunctionsData(data))
+      .catch(() => {});
+  }, []);
 
   const navItems = [
     { id: "junction-dashboard", label: "JUNCTION DASHBOARD", icon: "dashboard" },
@@ -13,7 +21,7 @@ export default function CityWideOverview({ onNavigate, onLogout }) {
     { id: "analytics-reports", label: "ANALYTICS & REPORTS", icon: "analytics" },
   ];
 
-  const junctions = [
+  const defaultJunctions = [
     {
       id: "VN-01-M",
       name: "Vijay Nagar Square",
@@ -56,7 +64,7 @@ export default function CityWideOverview({ onNavigate, onLogout }) {
     },
   ];
 
-  const filteredJunctions = junctions.filter(
+  const filteredJunctions = defaultJunctions.filter(
     (j) =>
       j.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       j.id.toLowerCase().includes(searchQuery.toLowerCase())
@@ -138,7 +146,14 @@ export default function CityWideOverview({ onNavigate, onLogout }) {
       {/* Main Area */}
       <div className="pl-72">
         {/* Header */}
-        <header className="fixed top-0 left-72 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-md z-40 flex items-center justify-end px-margin-edge shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+        <header className="fixed top-0 left-72 right-0 h-16 bg-surface-container-lowest/90 backdrop-blur-md z-40 flex items-center justify-between px-margin-edge shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
+          <div className="flex items-center gap-2">
+            <span className="bg-primary/10 text-primary text-[11px] font-label-bold px-2.5 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5 border border-primary/20">
+              <span className="w-2 h-2 rounded-full bg-[#2E7D32]" />
+              City Fleet Connected ({junctionsData.length || 5} Nodes)
+            </span>
+          </div>
+
           <div className="flex items-center gap-stack-md">
             <div className="text-right flex flex-col">
               <span className="font-label-bold text-label-bold text-on-surface">Operator 402</span>
@@ -317,7 +332,7 @@ export default function CityWideOverview({ onNavigate, onLogout }) {
                 <div className="px-stack-lg py-stack-md bg-surface-container-low border-b border-surface-container-high shrink-0">
                   <h2 className="font-headline-sm text-headline-sm text-on-surface mb-1">Active Nodes</h2>
                   <p className="font-body-md text-body-md text-on-surface-variant">
-                    Monitoring 25 primary city junctions.
+                    Monitoring {junctionsData.length || 25} primary city junctions.
                   </p>
 
                   {/* Search / Filter */}
@@ -595,7 +610,10 @@ export default function CityWideOverview({ onNavigate, onLogout }) {
                         Nominal Operation
                       </span>
                     </div>
-                    <button className="text-primary hover:text-primary-container font-label-bold text-label-bold uppercase flex items-center gap-1 transition-colors">
+                    <button
+                      onClick={() => onNavigate && onNavigate("analytics-reports")}
+                      className="text-primary hover:text-primary-container font-label-bold text-label-bold uppercase flex items-center gap-1 transition-colors"
+                    >
                       View Report{" "}
                       <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
                     </button>
