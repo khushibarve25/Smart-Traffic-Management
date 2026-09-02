@@ -2,20 +2,19 @@ import React, { useState } from "react";
 import OperatorLogin from "./OperatorLogin";
 import JunctionControlDashboard from "./JunctionControlDashboard";
 import CityWideOverview from "./CityWideOverview";
+import EmergencyPriority from "./EmergencyPriority";
 
 export default function App() {
-  // Views: 'login', 'junction-dashboard', 'city-wide-overview'
-  const [currentView, setCurrentView] = useState("city-wide-overview");
+  // Views: 'login', 'junction-dashboard', 'city-wide-overview', 'emergency-alerts'
+  const [currentView, setCurrentView] = useState("emergency-alerts");
 
   const handleNavigate = (viewId) => {
-    if (viewId === "junction-dashboard" || viewId === "city-wide-overview") {
-      setCurrentView(viewId);
-    }
+    setCurrentView(viewId);
   };
 
   return (
     <div className="relative">
-      {/* Quick View Switcher floating toolbar */}
+      {/* Quick View Switcher floating toolbar for rapid testing */}
       <div className="fixed top-3 right-48 z-50 flex items-center bg-surface-container-high/90 backdrop-blur-md border border-outline-variant/40 rounded-full p-1 shadow-sm gap-1 text-label-sm font-label-bold">
         <button
           onClick={() => setCurrentView("login")}
@@ -25,7 +24,7 @@ export default function App() {
               : "text-on-surface-variant hover:text-on-surface"
           }`}
         >
-          Operator Login
+          Login
         </button>
         <button
           onClick={() => setCurrentView("junction-dashboard")}
@@ -35,7 +34,7 @@ export default function App() {
               : "text-on-surface-variant hover:text-on-surface"
           }`}
         >
-          Junction Dashboard
+          Dashboard
         </button>
         <button
           onClick={() => setCurrentView("city-wide-overview")}
@@ -45,11 +44,21 @@ export default function App() {
               : "text-on-surface-variant hover:text-on-surface"
           }`}
         >
-          City-Wide Overview
+          City Overview
+        </button>
+        <button
+          onClick={() => setCurrentView("emergency-alerts")}
+          className={`px-3 py-1 rounded-full transition-colors ${
+            currentView === "emergency-alerts"
+              ? "bg-secondary text-on-secondary shadow-xs"
+              : "text-on-surface-variant hover:text-on-surface"
+          }`}
+        >
+          Emergency Priority
         </button>
       </div>
 
-      {/* View Routing */}
+      {/* Screen Router */}
       {currentView === "login" && (
         <OperatorLogin onLogin={() => setCurrentView("junction-dashboard")} />
       )}
@@ -63,6 +72,13 @@ export default function App() {
 
       {currentView === "city-wide-overview" && (
         <CityWideOverview
+          onLogout={() => setCurrentView("login")}
+          onNavigate={handleNavigate}
+        />
+      )}
+
+      {currentView === "emergency-alerts" && (
+        <EmergencyPriority
           onLogout={() => setCurrentView("login")}
           onNavigate={handleNavigate}
         />
