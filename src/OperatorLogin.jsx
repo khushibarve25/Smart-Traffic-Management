@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 
-export default function OperatorLogin() {
+export default function OperatorLogin({ onLogin }) {
   const [department, setDepartment] = useState("");
   const [role, setRole] = useState("");
   const [password, setPassword] = useState("");
@@ -12,7 +12,10 @@ export default function OperatorLogin() {
     setIsAuthenticating(true);
     setTimeout(() => {
       setIsAuthenticating(false);
-    }, 1000);
+      if (onLogin) {
+        onLogin({ department, role });
+      }
+    }, 800);
   };
 
   return (
