@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 
-export default function JunctionControlDashboard({ onLogout }) {
+export default function JunctionControlDashboard({ onLogout, onNavigate }) {
   const [currentTime, setCurrentTime] = useState("");
   const [lastUpdated, setLastUpdated] = useState("12:04:22");
   const [activeNav, setActiveNav] = useState("junction-dashboard");
@@ -59,6 +59,7 @@ export default function JunctionControlDashboard({ onLogout }) {
                 onClick={(e) => {
                   e.preventDefault();
                   setActiveNav(item.id);
+                  if (onNavigate) onNavigate(item.id);
                 }}
                 className={`flex items-center px-4 py-3 transition-all group relative ${
                   isActive
