@@ -4,10 +4,11 @@ import JunctionControlDashboard from "./JunctionControlDashboard";
 import CityWideOverview from "./CityWideOverview";
 import EmergencyPriority from "./EmergencyPriority";
 import HistoricalAnalysis from "./HistoricalAnalysis";
+import AdminSettings from "./AdminSettings";
 
 export default function App() {
-  // Views: 'login', 'junction-dashboard', 'city-wide-overview', 'emergency-alerts', 'analytics-reports'
-  const [currentView, setCurrentView] = useState("analytics-reports");
+  // Views: 'login', 'junction-dashboard', 'city-wide-overview', 'emergency-alerts', 'analytics-reports', 'admin-settings'
+  const [currentView, setCurrentView] = useState("admin-settings");
 
   const handleNavigate = (viewId) => {
     setCurrentView(viewId);
@@ -15,7 +16,7 @@ export default function App() {
 
   return (
     <div className="relative">
-      {/* Floating View Switcher Bar */}
+      {/* Floating View Switcher Bar for fast navigation/testing across all modules */}
       <div className="fixed top-3 right-48 z-50 flex items-center bg-surface-container-high/90 backdrop-blur-md border border-outline-variant/40 rounded-full p-1 shadow-sm gap-1 text-label-sm font-label-bold overflow-x-auto max-w-[calc(100vw-300px)]">
         <button
           onClick={() => setCurrentView("login")}
@@ -65,7 +66,17 @@ export default function App() {
               : "text-on-surface-variant hover:text-on-surface"
           }`}
         >
-          Historical Analytics
+          Analytics & Reports
+        </button>
+        <button
+          onClick={() => setCurrentView("admin-settings")}
+          className={`px-3 py-1 rounded-full transition-colors whitespace-nowrap ${
+            currentView === "admin-settings"
+              ? "bg-primary text-on-primary shadow-xs"
+              : "text-on-surface-variant hover:text-on-surface"
+          }`}
+        >
+          Admin & Settings
         </button>
       </div>
 
@@ -97,6 +108,13 @@ export default function App() {
 
       {currentView === "analytics-reports" && (
         <HistoricalAnalysis
+          onLogout={() => setCurrentView("login")}
+          onNavigate={handleNavigate}
+        />
+      )}
+
+      {currentView === "admin-settings" && (
+        <AdminSettings
           onLogout={() => setCurrentView("login")}
           onNavigate={handleNavigate}
         />
